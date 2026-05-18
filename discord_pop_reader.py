@@ -14,8 +14,37 @@ ENV_PATH = BASE_DIR / ".env"
 
 load_dotenv(dotenv_path=ENV_PATH, override=True)
 
-TOKEN = os.getenv("DISCORD_TOKEN")
-CHANNEL_ID = int(os.getenv("DISCORD_CHANNEL_ID"))
+
+def get_secret(name):
+    value = os.getenv(name)
+
+    if value:
+        return value
+
+    try:
+        import streamlit as st
+
+        return st.secrets.get(name)
+    except Exception:
+        return None
+
+
+def get_discord_config():
+    token = get_secret("DISCORD_TOKEN")
+    channel_id = get_secret("DISCORD_CHANNEL_ID")
+
+    if not token:
+        raise RuntimeError("Missing DISCORD_TOKEN.")
+
+    if not channel_id:
+        raise RuntimeError("Missing DISCORD_CHANNEL_ID.")
+
+    try:
+        channel_id = int(channel_id)
+    except ValueError as exc:
+        raise RuntimeError("DISCORD_CHANNEL_ID must be a number.") from exc
+
+    return token, channel_id
 
 
 # =========================
@@ -42,6 +71,7 @@ POP_EMOJIS = {
 # =========================
 
 async def fetch_discord_inventory(limit=500):
+    token, channel_id = get_discord_config()
 
     intents = discord.Intents.default()
     intents.guilds = True
@@ -61,7 +91,7 @@ async def fetch_discord_inventory(limit=500):
 
         print(f"Logged in as {client.user}")
 
-        channel = client.get_channel(CHANNEL_ID)
+        channel = client.get_channel(channel_id)
 
         if channel is None:
             print("Could not find Discord channel.")
@@ -107,6 +137,6 @@ async def fetch_discord_inventory(limit=500):
 
         await client.close()
 
-    await client.start(TOKEN)
+    await client.start(token)
 
     return dict(inventory)
