@@ -2,7 +2,11 @@ import asyncio
 import re
 from pathlib import Path
 import streamlit as st
-from discord_pop_reader import fetch_discord_inventory, fetch_raidhelper_attendees
+from discord_pop_reader import (
+    fetch_discord_inventory,
+    fetch_raidhelper_attendees,
+    fetch_raidhelper_debug,
+)
 
 try:
     from streamlit_sortables import sort_items
@@ -626,6 +630,11 @@ if st.button("Pull Friday Sky Signups"):
                 st.success(f"Loaded {len(names)} Friday Sky attendees.")
             else:
                 st.warning("No Friday Sky attendees found in RaidHelper.")
+                debug_rows = asyncio.run(fetch_raidhelper_debug(limit=10))
+
+                if debug_rows:
+                    with st.expander("Recent RaidHelper embed debug"):
+                        st.dataframe(debug_rows, use_container_width=True)
 
         except Exception as e:
             st.error("RaidHelper signup read failed.")

@@ -54,28 +54,39 @@ def get_discord_config(channel_secret="DISCORD_CHANNEL_ID", default_channel_id=N
 
 
 def message_matches_event(message, event_name):
-    event_name = event_name.lower()
-
-    if event_name in (message.content or "").lower():
-        return True
+    event_terms = [
+        term
+        for term in event_name.lower().split()
+        if term
+    ]
+    searchable_parts = [message.content or ""]
 
     for embed in message.embeds:
-        parts = [
+        searchable_parts.extend([
             embed.title or "",
             embed.description or "",
             embed.author.name if embed.author else "",
             embed.footer.text if embed.footer else "",
-        ]
-        parts.extend(field.name or "" for field in embed.fields)
+        ])
+        searchable_parts.extend(field.name or "" for field in embed.fields)
+        searchable_parts.extend(field.value or "" for field in embed.fields)
 
-        if event_name in "\n".join(parts).lower():
-            return True
+    for component in message.components:
+        for child in getattr(component, "children", []):
+            searchable_parts.append(getattr(child, "label", "") or "")
+            searchable_parts.append(getattr(child, "custom_id", "") or "")
 
-    return False
+    searchable = "\n".join(searchable_parts).lower()
+
+    if event_name.lower() in searchable:
+        return True
+
+    return all(term in searchable for term in event_terms)
 
 
-def field_is_attending(field_name):
+def field_is_attending(field_name, field_value=""):
     field_name = field_name.lower()
+    field_value = field_value.lower()
     blocked_words = [
         "absent",
         "absence",
@@ -86,7 +97,23 @@ def field_is_attending(field_name):
         "waitlist",
     ]
 
-    return not any(word in field_name for word in blocked_words)
+    attending_words = [
+        "accepted",
+        "attending",
+        "confirmed",
+        "going",
+        "signed",
+        "signup",
+        "yes",
+    ]
+
+    if any(word in field_name for word in blocked_words):
+        return False
+
+    if any(word in field_name for word in attending_words):
+        return True
+
+    return "<@" in field_value
 
 
 def clean_raidhelper_name(line, mention_lookup):
@@ -126,7 +153,7 @@ def extract_raidhelper_attendees(message):
 
     for embed in message.embeds:
         for field in embed.fields:
-            if not field_is_attending(field.name or ""):
+            if not field_is_attending(field.name or "", field.value or ""):
                 continue
 
             for line in (field.value or "").splitlines():
@@ -134,6 +161,41 @@ def extract_raidhelper_attendees(message):
 
                 if name and not name.lower().startswith(("empty", "none")):
                     attendees.append(name)
+
+    seen = set()
+    clean = []
+
+    for attendee in attendees:
+        key = attendee.lower()
+
+        if key not in seen:
+            seen.add(key)
+            clean.append(attendee)
+
+    return clean
+
+
+async def extract_reaction_attendees(message):
+    attendees = []
+
+    for reaction in message.reactions:
+        emoji_name = (
+            reaction.emoji.name
+            if hasattr(reaction.emoji, "name")
+            else str(reaction.emoji)
+        ).lower()
+
+        if any(
+            word in emoji_name
+            for word in ["no", "decline", "absent", "bench", "wait"]
+        ):
+            continue
+
+        async for user in reaction.users():
+            if user.bot:
+                continue
+
+            attendees.append(user.display_name)
 
     seen = set()
     clean = []
@@ -283,6 +345,9 @@ async def fetch_raidhelper_attendees(event_name="Friday Sky", limit=100):
 
             attendees = extract_raidhelper_attendees(message)
 
+            if not attendees:
+                attendees = await extract_reaction_attendees(message)
+
             if attendees:
                 break
 
@@ -291,3 +356,47 @@ async def fetch_raidhelper_attendees(event_name="Friday Sky", limit=100):
     await client.start(token)
 
     return attendees
+
+
+async def fetch_raidhelper_debug(limit=10):
+    token, channel_id = get_discord_config(
+        "DISCORD_SIGNUP_CHANNEL_ID",
+        default_channel_id="1383458990121291837",
+    )
+
+    intents = discord.Intents.default()
+    intents.guilds = True
+    intents.messages = True
+    intents.reactions = False
+    intents.message_content = False
+    intents.members = False
+
+    client = discord.Client(intents=intents)
+    rows = []
+
+    @client.event
+    async def on_ready():
+        nonlocal rows
+
+        channel = client.get_channel(channel_id)
+
+        if channel is None:
+            channel = await client.fetch_channel(channel_id)
+
+        async for message in channel.history(limit=limit):
+            for embed in message.embeds:
+                rows.append({
+                    "content": message.content or "",
+                    "title": embed.title or "",
+                    "description": (embed.description or "")[:300],
+                    "fields": ", ".join(
+                        field.name or ""
+                        for field in embed.fields[:10]
+                    ),
+                })
+
+        await client.close()
+
+    await client.start(token)
+
+    return rows
