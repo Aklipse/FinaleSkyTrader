@@ -214,6 +214,161 @@ def display_header():
     )
 
 
+def inject_app_styles():
+    st.markdown(
+        """
+        <style>
+        :root {
+            --sky-bg: #0d1117;
+            --sky-panel: #151b24;
+            --sky-panel-soft: #1b2330;
+            --sky-border: rgba(168, 178, 196, 0.18);
+            --sky-text: #edf2f7;
+            --sky-muted: #9aa7b8;
+            --sky-red: #d94848;
+            --sky-red-hover: #f05c5c;
+            --sky-teal: #2dd4bf;
+            --sky-gold: #f2c14e;
+        }
+
+        .stApp {
+            background:
+                radial-gradient(circle at top left, rgba(45, 212, 191, 0.13), transparent 34rem),
+                radial-gradient(circle at top right, rgba(217, 72, 72, 0.15), transparent 32rem),
+                var(--sky-bg);
+            color: var(--sky-text);
+        }
+
+        .block-container {
+            max-width: 1320px;
+            padding-top: 1.4rem;
+            padding-bottom: 4rem;
+        }
+
+        [data-testid="stHeader"] {
+            background: transparent;
+        }
+
+        [data-testid="stToolbar"] {
+            right: 1rem;
+        }
+
+        [data-testid="stImage"] img {
+            border: 1px solid var(--sky-border);
+            border-radius: 8px;
+            box-shadow: 0 24px 70px rgba(0, 0, 0, 0.34);
+        }
+
+        h2 {
+            margin-top: 2rem !important;
+            padding: 1rem 1.1rem 0.85rem;
+            border: 1px solid var(--sky-border);
+            border-radius: 8px 8px 0 0;
+            background: linear-gradient(90deg, rgba(27, 35, 48, 0.96), rgba(21, 27, 36, 0.72));
+            color: var(--sky-text) !important;
+            font-size: 1.35rem !important;
+            letter-spacing: 0 !important;
+        }
+
+        h3 {
+            margin-top: 1.4rem !important;
+            color: var(--sky-text) !important;
+            letter-spacing: 0 !important;
+        }
+
+        p, label, span, div {
+            letter-spacing: 0 !important;
+        }
+
+        [data-testid="stExpander"] {
+            border: 1px solid var(--sky-border);
+            border-radius: 8px;
+            background: rgba(21, 27, 36, 0.82);
+            box-shadow: 0 18px 50px rgba(0, 0, 0, 0.18);
+        }
+
+        [data-testid="stExpander"] summary {
+            font-weight: 700;
+            color: var(--sky-text);
+        }
+
+        [data-testid="stDataFrame"],
+        [data-testid="stDataEditor"] {
+            border: 1px solid var(--sky-border);
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 18px 45px rgba(0, 0, 0, 0.2);
+        }
+
+        div[data-testid="stButton"] > button {
+            min-height: 2.8rem;
+            border-radius: 8px;
+            border: 1px solid var(--sky-border);
+            background: var(--sky-panel-soft);
+            color: var(--sky-text);
+            font-weight: 700;
+            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
+            transition: border-color 120ms ease, transform 120ms ease, background 120ms ease;
+        }
+
+        div[data-testid="stButton"] > button:hover {
+            border-color: rgba(45, 212, 191, 0.68);
+            background: #202b3a;
+            color: white;
+            transform: translateY(-1px);
+        }
+
+        div[data-testid="stButton"] > button[kind="primary"],
+        button[data-testid="stBaseButton-primary"] {
+            border-color: rgba(217, 72, 72, 0.85);
+            background: linear-gradient(135deg, var(--sky-red), #9f3434);
+            color: white;
+        }
+
+        div[data-testid="stButton"] > button[kind="primary"]:hover,
+        button[data-testid="stBaseButton-primary"]:hover {
+            border-color: rgba(240, 92, 92, 0.95);
+            background: linear-gradient(135deg, var(--sky-red-hover), #b83d3d);
+        }
+
+        [data-baseweb="input"] {
+            border-radius: 8px;
+            background: rgba(21, 27, 36, 0.96);
+            border-color: var(--sky-border);
+        }
+
+        [data-baseweb="input"] input {
+            color: var(--sky-text);
+        }
+
+        [data-testid="stAlert"] {
+            border-radius: 8px;
+            border: 1px solid var(--sky-border);
+        }
+
+        iframe[title="streamlit_sortables.sort_items"] {
+            border: 1px solid var(--sky-border);
+            border-radius: 8px;
+            background: rgba(21, 27, 36, 0.82);
+            box-shadow: 0 18px 45px rgba(0, 0, 0, 0.16);
+        }
+
+        [data-testid="stMetric"] {
+            padding: 0.85rem 1rem;
+            border: 1px solid var(--sky-border);
+            border-radius: 8px;
+            background: rgba(21, 27, 36, 0.82);
+        }
+
+        hr {
+            border-color: var(--sky-border);
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def required_items_for_gods(gods):
     needed = []
 
@@ -545,6 +700,7 @@ st.set_page_config(
 )
 
 
+inject_app_styles()
 display_header()
 
 if "inventory" not in st.session_state:
@@ -584,6 +740,29 @@ normalized_god_buckets = normalize_god_buckets(st.session_state.god_buckets)
 if normalized_god_buckets != st.session_state.god_buckets:
     st.session_state.god_buckets = normalized_god_buckets
     st.session_state.god_drag_version += 1
+
+
+metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
+
+with metric_col1:
+    st.metric("Inventory Members", len(st.session_state.inventory_rows))
+
+with metric_col2:
+    st.metric("Attendees", len(st.session_state.attending_names))
+
+with metric_col3:
+    assigned_members = (
+        len(st.session_state.attendee_buckets.get("Alliance 1", []))
+        + len(st.session_state.attendee_buckets.get("Alliance 2", []))
+    )
+    st.metric("Assigned Members", assigned_members)
+
+with metric_col4:
+    assigned_gods = (
+        len(st.session_state.god_buckets.get("Alliance 1", []))
+        + len(st.session_state.god_buckets.get("Alliance 2", []))
+    )
+    st.metric("Assigned Gods", assigned_gods)
 
 
 st.header("1. Discord Inventory Parse")
@@ -656,48 +835,57 @@ with st.expander("Parsed Discord Inventory", expanded=True):
 
 st.header("2. Alliance Setups")
 
-if st.button("Pull Friday Sky Signups", type="primary"):
-    with st.spinner("Reading RaidHelper signups..."):
-        try:
-            names = asyncio.run(
-                fetch_raidhelper_attendees(
-                    event_name="Friday Sky",
-                    limit=500,
+signup_col, reload_col = st.columns([1.3, 1])
+
+with signup_col:
+    if st.button("Pull Friday Sky Signups", type="primary"):
+        with st.spinner("Reading RaidHelper signups..."):
+            try:
+                names = asyncio.run(
+                    fetch_raidhelper_attendees(
+                        event_name="Friday Sky",
+                        limit=500,
+                    )
                 )
-            )
 
-            if names:
-                add_available_attendees(names)
-                st.success(f"Loaded {len(names)} Friday Sky attendees.")
-            else:
-                st.warning("No Friday Sky attendees found in RaidHelper.")
-                debug_rows = asyncio.run(fetch_raidhelper_debug(limit=50))
+                if names:
+                    add_available_attendees(names)
+                    st.success(f"Loaded {len(names)} Friday Sky attendees.")
+                else:
+                    st.warning("No Friday Sky attendees found in RaidHelper.")
+                    debug_rows = asyncio.run(fetch_raidhelper_debug(limit=50))
 
-                if debug_rows:
-                    with st.expander("Recent RaidHelper embed debug"):
-                        st.dataframe(debug_rows, use_container_width=True)
+                    if debug_rows:
+                        with st.expander("Recent RaidHelper embed debug"):
+                            st.dataframe(debug_rows, use_container_width=True)
 
-        except Exception as e:
-            st.error("RaidHelper signup read failed.")
-            st.exception(e)
+            except Exception as e:
+                st.error("RaidHelper signup read failed.")
+                st.exception(e)
 
-if st.button("Reload Alliance Setup"):
-    reset_attendee_assignments(st.session_state.attending_names)
-    st.success("Alliance assignments reset.")
+with reload_col:
+    if st.button("Reload Alliance Setup"):
+        reset_attendee_assignments(st.session_state.attending_names)
+        st.success("Alliance assignments reset.")
 
-late_attendee = st.text_input(
-    "Add Available Attendee",
-    placeholder="Late member name",
-)
+late_col, add_col = st.columns([1.8, 0.8])
 
-if st.button("Add Attendee"):
-    names = names_from_text(late_attendee)
+with late_col:
+    late_attendee = st.text_input(
+        "Add Available Attendee",
+        placeholder="Late member name",
+    )
 
-    if names:
-        add_available_attendees(names)
-        st.success(f"Added {', '.join(names)}.")
-    else:
-        st.warning("Enter a member name first.")
+with add_col:
+    st.write("")
+    if st.button("Add Attendee"):
+        names = names_from_text(late_attendee)
+
+        if names:
+            add_available_attendees(names)
+            st.success(f"Added {', '.join(names)}.")
+        else:
+            st.warning("Enter a member name first.")
 
 st.subheader("Alliance Assignments")
 
