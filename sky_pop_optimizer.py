@@ -621,7 +621,7 @@ if st.button("Pull Friday Sky Signups"):
             names = asyncio.run(
                 fetch_raidhelper_attendees(
                     event_name="Friday Sky",
-                    limit=100,
+                    limit=500,
                 )
             )
 
@@ -630,7 +630,7 @@ if st.button("Pull Friday Sky Signups"):
                 st.success(f"Loaded {len(names)} Friday Sky attendees.")
             else:
                 st.warning("No Friday Sky attendees found in RaidHelper.")
-                debug_rows = asyncio.run(fetch_raidhelper_debug(limit=10))
+                debug_rows = asyncio.run(fetch_raidhelper_debug(limit=50))
 
                 if debug_rows:
                     with st.expander("Recent RaidHelper embed debug"):

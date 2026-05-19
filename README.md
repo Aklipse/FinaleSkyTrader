@@ -26,3 +26,5 @@ DISCORD_TOKEN = "your_discord_bot_token"
 DISCORD_CHANNEL_ID = "your_pop_items_channel_id"
 DISCORD_SIGNUP_CHANNEL_ID = "1383458990121291837"
 ```
+
+For RaidHelper signup pulls, enable **Message Content Intent** for the bot in the Discord Developer Portal.

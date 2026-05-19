@@ -84,6 +84,38 @@ def message_matches_event(message, event_name):
     return all(term in searchable for term in event_terms)
 
 
+def text_matches_event(text, event_name):
+    text = (text or "").lower()
+    event_name = event_name.lower()
+    event_terms = [
+        term
+        for term in event_name.split()
+        if term
+    ]
+
+    if event_name in text:
+        return True
+
+    return all(term in text for term in event_terms)
+
+
+def component_labels(message):
+    labels = []
+
+    for component in message.components:
+        for child in getattr(component, "children", []):
+            label = getattr(child, "label", "") or ""
+            custom_id = getattr(child, "custom_id", "") or ""
+
+            if label:
+                labels.append(label)
+
+            if custom_id:
+                labels.append(custom_id)
+
+    return labels
+
+
 def field_is_attending(field_name, field_value=""):
     field_name = field_name.lower()
     field_value = field_value.lower()
@@ -116,6 +148,28 @@ def field_is_attending(field_name, field_value=""):
     return "<@" in field_value
 
 
+def line_looks_like_name(line):
+    lowered = line.lower()
+    blocked = [
+        "accepted",
+        "attending",
+        "bench",
+        "declined",
+        "empty",
+        "maybe",
+        "not attending",
+        "signup",
+        "tentative",
+        "unavailable",
+        "waitlist",
+    ]
+
+    if any(word in lowered for word in blocked):
+        return False
+
+    return any(char.isalpha() for char in line)
+
+
 def clean_raidhelper_name(line, mention_lookup):
     line = line.strip()
 
@@ -128,9 +182,17 @@ def clean_raidhelper_name(line, mention_lookup):
 
     line = line.replace("`", "")
     line = line.replace("*", "")
+    line = line.replace("_", "")
+    line = line.replace(">", "")
 
     if "." in line:
         prefix, rest = line.split(".", 1)
+
+        if prefix.strip().isdigit():
+            line = rest
+
+    if ")" in line:
+        prefix, rest = line.split(")", 1)
 
         if prefix.strip().isdigit():
             line = rest
@@ -151,12 +213,33 @@ def extract_raidhelper_attendees(message):
     }
     attendees = []
 
+    for line in (message.content or "").splitlines():
+        if not line_looks_like_name(line):
+            continue
+
+        name = clean_raidhelper_name(line, mention_lookup)
+
+        if name and not name.lower().startswith(("empty", "none")):
+            attendees.append(name)
+
     for embed in message.embeds:
+        for line in (embed.description or "").splitlines():
+            if not line_looks_like_name(line):
+                continue
+
+            name = clean_raidhelper_name(line, mention_lookup)
+
+            if name and not name.lower().startswith(("empty", "none")):
+                attendees.append(name)
+
         for field in embed.fields:
             if not field_is_attending(field.name or "", field.value or ""):
                 continue
 
             for line in (field.value or "").splitlines():
+                if not line_looks_like_name(line):
+                    continue
+
                 name = clean_raidhelper_name(line, mention_lookup)
 
                 if name and not name.lower().startswith(("empty", "none")):
@@ -208,6 +291,27 @@ async def extract_reaction_attendees(message):
             clean.append(attendee)
 
     return clean
+
+
+async def signup_message_sources(channel):
+    sources = [channel]
+    seen_ids = {channel.id}
+
+    for thread in getattr(channel, "threads", []):
+        if thread.id not in seen_ids:
+            seen_ids.add(thread.id)
+            sources.append(thread)
+
+    if hasattr(channel, "archived_threads"):
+        try:
+            async for thread in channel.archived_threads(limit=50):
+                if thread.id not in seen_ids:
+                    seen_ids.add(thread.id)
+                    sources.append(thread)
+        except discord.DiscordException:
+            pass
+
+    return sources
 
 
 # =========================
@@ -305,7 +409,7 @@ async def fetch_discord_inventory(limit=500):
     return dict(inventory)
 
 
-async def fetch_raidhelper_attendees(event_name="Friday Sky", limit=100):
+async def fetch_raidhelper_attendees(event_name="Friday Sky", limit=500):
     token, channel_id = get_discord_config(
         "DISCORD_SIGNUP_CHANNEL_ID",
         default_channel_id="1383458990121291837",
@@ -315,7 +419,7 @@ async def fetch_raidhelper_attendees(event_name="Friday Sky", limit=100):
     intents.guilds = True
     intents.messages = True
     intents.reactions = False
-    intents.message_content = False
+    intents.message_content = True
     intents.members = False
 
     client = discord.Client(intents=intents)
@@ -339,14 +443,24 @@ async def fetch_raidhelper_attendees(event_name="Friday Sky", limit=100):
 
         print(f"Reading signup channel: {channel.name}")
 
-        async for message in channel.history(limit=limit):
-            if not message_matches_event(message, event_name):
-                continue
+        for source in await signup_message_sources(channel):
+            print(f"Scanning signup source: {source.name}")
+            source_matches = text_matches_event(source.name, event_name)
 
-            attendees = extract_raidhelper_attendees(message)
+            async for message in source.history(limit=limit):
+                if not source_matches and not message_matches_event(
+                    message,
+                    event_name,
+                ):
+                    continue
 
-            if not attendees:
-                attendees = await extract_reaction_attendees(message)
+                attendees = extract_raidhelper_attendees(message)
+
+                if not attendees:
+                    attendees = await extract_reaction_attendees(message)
+
+                if attendees:
+                    break
 
             if attendees:
                 break
@@ -358,7 +472,7 @@ async def fetch_raidhelper_attendees(event_name="Friday Sky", limit=100):
     return attendees
 
 
-async def fetch_raidhelper_debug(limit=10):
+async def fetch_raidhelper_debug(limit=50):
     token, channel_id = get_discord_config(
         "DISCORD_SIGNUP_CHANNEL_ID",
         default_channel_id="1383458990121291837",
@@ -368,7 +482,7 @@ async def fetch_raidhelper_debug(limit=10):
     intents.guilds = True
     intents.messages = True
     intents.reactions = False
-    intents.message_content = False
+    intents.message_content = True
     intents.members = False
 
     client = discord.Client(intents=intents)
@@ -383,17 +497,42 @@ async def fetch_raidhelper_debug(limit=10):
         if channel is None:
             channel = await client.fetch_channel(channel_id)
 
-        async for message in channel.history(limit=limit):
-            for embed in message.embeds:
-                rows.append({
-                    "content": message.content or "",
-                    "title": embed.title or "",
-                    "description": (embed.description or "")[:300],
-                    "fields": ", ".join(
-                        field.name or ""
-                        for field in embed.fields[:10]
-                    ),
-                })
+        for source in await signup_message_sources(channel):
+            async for message in source.history(limit=limit):
+                if not message.embeds:
+                    rows.append({
+                        "source": source.name,
+                        "message_id": str(message.id),
+                        "created_at": message.created_at.isoformat(),
+                        "author": str(message.author),
+                        "content": message.content or "",
+                        "title": "",
+                        "description": "",
+                        "fields": "",
+                        "field_values": "",
+                        "components": ", ".join(component_labels(message)),
+                    })
+                    continue
+
+                for embed in message.embeds:
+                    rows.append({
+                        "source": source.name,
+                        "message_id": str(message.id),
+                        "created_at": message.created_at.isoformat(),
+                        "author": str(message.author),
+                        "content": message.content or "",
+                        "title": embed.title or "",
+                        "description": (embed.description or "")[:500],
+                        "fields": ", ".join(
+                            field.name or ""
+                            for field in embed.fields[:10]
+                        ),
+                        "field_values": "\n---\n".join(
+                            (field.value or "")[:500]
+                            for field in embed.fields[:5]
+                        ),
+                        "components": ", ".join(component_labels(message)),
+                    })
 
         await client.close()
 
