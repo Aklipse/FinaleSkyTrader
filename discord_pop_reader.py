@@ -254,8 +254,22 @@ def extract_raidhelper_attendees(message):
         if not user.bot
     }
     attendees = []
+    content = message.content or ""
 
-    for line in (message.content or "").splitlines():
+    attending_content = re.split(
+        r"(?:tentative|absence|absent|declined|unavailable)",
+        content,
+        maxsplit=1,
+        flags=re.IGNORECASE,
+    )[0]
+
+    for match in re.finditer(
+        r"\b\d{1,2}\s+([A-Za-z][A-Za-z0-9'_-]{1,31})",
+        attending_content,
+    ):
+        attendees.append(match.group(1))
+
+    for line in attending_content.splitlines():
         if not line_looks_like_name(line):
             continue
 
@@ -334,7 +348,23 @@ async def signup_message_sources(channel):
         except discord.DiscordException:
             pass
 
-    return sources
+    return sorted(
+        sources,
+        key=lambda source: getattr(source, "created_at", None),
+        reverse=True,
+    )
+
+
+def source_matches_event(source, event_name):
+    source_name = getattr(source, "name", "")
+
+    return (
+        text_matches_event(source_name, event_name)
+        and not any(
+            blocked in source_name.lower()
+            for blocked in ["sea", "limbus", "henm"]
+        )
+    )
 
 
 # =========================
@@ -466,9 +496,17 @@ async def fetch_raidhelper_attendees(event_name="Friday Sky", limit=500):
 
         print(f"Reading signup channel: {channel.name}")
 
-        for source in await signup_message_sources(channel):
+        sources = await signup_message_sources(channel)
+        matching_sources = [
+            source
+            for source in sources
+            if source_matches_event(source, event_name)
+        ]
+        sources = matching_sources or sources
+
+        for source in sources:
             print(f"Scanning signup source: {source.name}")
-            source_matches = text_matches_event(source.name, event_name)
+            source_matches = source_matches_event(source, event_name)
 
             async for message in source.history(limit=limit):
                 if not source_matches and not message_matches_event(
@@ -486,6 +524,9 @@ async def fetch_raidhelper_attendees(event_name="Friday Sky", limit=500):
                     break
 
             if attendees:
+                break
+
+            if source_matches:
                 break
 
         await client.close()
