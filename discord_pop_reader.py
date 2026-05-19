@@ -1,4 +1,5 @@
 import os
+import re
 from pathlib import Path
 from collections import defaultdict
 from dotenv import load_dotenv
@@ -162,12 +163,21 @@ def line_looks_like_name(line):
         "tentative",
         "unavailable",
         "waitlist",
+        "web view",
     ]
 
     if any(word in lowered for word in blocked):
         return False
 
-    return any(char.isalpha() for char in line)
+    has_signup_marker = "✅" in line or "☑" in line or "<:" in line
+    has_numbered_name = bool(
+        re.search(r"^\W*\d{1,2}[\).]?\s+\S+", line)
+    )
+
+    return has_numbered_name or (
+        has_signup_marker
+        and bool(re.search(r"\d{1,2}[\).]?\s+\S+", line))
+    )
 
 
 def clean_raidhelper_name(line, mention_lookup):
@@ -184,6 +194,11 @@ def clean_raidhelper_name(line, mention_lookup):
     line = line.replace("*", "")
     line = line.replace("_", "")
     line = line.replace(">", "")
+    line = line.replace("✅", "")
+    line = line.replace("☑", "")
+    line = re.sub(r"<a?:[^:>]+:\d+>", "", line)
+    line = re.sub(r"^\W+", "", line)
+    line = re.sub(r"^\s*\d{1,2}[\).]?\s+", "", line)
 
     if "." in line:
         prefix, rest = line.split(".", 1)
@@ -202,7 +217,34 @@ def clean_raidhelper_name(line, mention_lookup):
     line = line.split(" (", 1)[0]
     line = line.strip("•-–— \t")
 
+    line = line.strip("- \t")
+
     return " ".join(line.split())
+
+
+def clean_raidhelper_attendees(attendees):
+    seen = set()
+    clean = []
+    blocked = {"friday", "friday sky", "holyhood", "yes"}
+
+    for attendee in attendees:
+        attendee = " ".join(str(attendee).split()).strip()
+        key = attendee.lower()
+
+        if not attendee or key in blocked:
+            continue
+
+        if len(attendee) > 32:
+            continue
+
+        if not any(char.isalpha() for char in attendee):
+            continue
+
+        if key not in seen:
+            seen.add(key)
+            clean.append(attendee)
+
+    return clean
 
 
 def extract_raidhelper_attendees(message):
@@ -223,15 +265,6 @@ def extract_raidhelper_attendees(message):
             attendees.append(name)
 
     for embed in message.embeds:
-        for line in (embed.description or "").splitlines():
-            if not line_looks_like_name(line):
-                continue
-
-            name = clean_raidhelper_name(line, mention_lookup)
-
-            if name and not name.lower().startswith(("empty", "none")):
-                attendees.append(name)
-
         for field in embed.fields:
             if not field_is_attending(field.name or "", field.value or ""):
                 continue
@@ -245,17 +278,7 @@ def extract_raidhelper_attendees(message):
                 if name and not name.lower().startswith(("empty", "none")):
                     attendees.append(name)
 
-    seen = set()
-    clean = []
-
-    for attendee in attendees:
-        key = attendee.lower()
-
-        if key not in seen:
-            seen.add(key)
-            clean.append(attendee)
-
-    return clean
+    return clean_raidhelper_attendees(attendees)
 
 
 async def extract_reaction_attendees(message):
