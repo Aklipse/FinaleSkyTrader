@@ -602,20 +602,7 @@ with st.expander("Parsed Discord Inventory", expanded=True):
 
 st.header("2. Alliance Setups")
 
-manual_attendees = st.text_area(
-    "Attendee Names",
-    value="\n".join(st.session_state.attending_names),
-    height=120,
-    placeholder="One name per line",
-    key="manual_attendees",
-)
-
-if st.button("Load Attendee Names"):
-    names = names_from_text(manual_attendees)
-    add_available_attendees(names)
-    st.success(f"Loaded {len(st.session_state.attending_names)} attendee names.")
-
-if st.button("Pull Friday Sky Signups"):
+if st.button("Pull Friday Sky Signups", type="primary"):
     with st.spinner("Reading RaidHelper signups..."):
         try:
             names = asyncio.run(
@@ -640,6 +627,19 @@ if st.button("Pull Friday Sky Signups"):
         except Exception as e:
             st.error("RaidHelper signup read failed.")
             st.exception(e)
+
+manual_attendees = st.text_area(
+    "Attendee Names",
+    value="\n".join(st.session_state.attending_names),
+    height=120,
+    placeholder="One name per line",
+    key="manual_attendees",
+)
+
+if st.button("Manualy Load Attendee"):
+    names = names_from_text(manual_attendees)
+    add_available_attendees(names)
+    st.success(f"Loaded {len(st.session_state.attending_names)} attendee names.")
 
 if st.button("Reload Alliance Setup"):
     names = names_from_text(manual_attendees)
