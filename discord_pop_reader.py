@@ -143,10 +143,55 @@ def field_is_attending(field_name, field_value=""):
     if any(word in field_name for word in blocked_words):
         return False
 
+    if any(word in field_value for word in ["tentative", "absence", "absent"]):
+        return False
+
+    if any(marker in field_value for marker in [":yes:", "<:yes:", "✅"]):
+        return True
+
     if any(word in field_name for word in attending_words):
         return True
 
-    return "<@" in field_value
+    return False
+
+
+def extract_numbered_signup_names(text, mention_lookup):
+    if not text:
+        return []
+
+    for user_id, display_name in mention_lookup.items():
+        text = text.replace(f"<@{user_id}>", display_name)
+        text = text.replace(f"<@!{user_id}>", display_name)
+
+    attending_text = re.split(
+        r"(?:tentative|absence|absent|declined|unavailable|waitlist)",
+        text,
+        maxsplit=1,
+        flags=re.IGNORECASE,
+    )[0]
+
+    names = []
+
+    for match in re.finditer(
+        r"`?\d{1,2}`?\s+\*\*([^*\n]{1,64})\*\*",
+        attending_text,
+    ):
+        names.append(match.group(1).strip())
+
+    simplified = re.sub(r"<a?:[^:>]+:\d+>", " ", attending_text)
+    simplified = simplified.replace("`", "")
+    simplified = simplified.replace("*", "")
+
+    for line in simplified.splitlines():
+        if not line_looks_like_name(line):
+            continue
+
+        name = clean_raidhelper_name(line, mention_lookup)
+
+        if name and not name.lower().startswith(("empty", "none")):
+            names.append(name)
+
+    return names
 
 
 def line_looks_like_name(line):
@@ -260,41 +305,21 @@ def extract_raidhelper_attendees(message):
     attendees = []
     content = message.content or ""
 
-    attending_content = re.split(
-        r"(?:tentative|absence|absent|declined|unavailable)",
-        content,
-        maxsplit=1,
-        flags=re.IGNORECASE,
-    )[0]
-
-    for match in re.finditer(
-        r"\b\d{1,2}\s+([A-Za-z][A-Za-z0-9'_\-()]{1,31})",
-        attending_content,
-    ):
-        attendees.append(match.group(1))
-
-    for line in attending_content.splitlines():
-        if not line_looks_like_name(line):
-            continue
-
-        name = clean_raidhelper_name(line, mention_lookup)
-
-        if name and not name.lower().startswith(("empty", "none")):
-            attendees.append(name)
+    attendees.extend(extract_numbered_signup_names(content, mention_lookup))
 
     for embed in message.embeds:
+        if embed.description:
+            attendees.extend(
+                extract_numbered_signup_names(embed.description, mention_lookup)
+            )
+
         for field in embed.fields:
             if not field_is_attending(field.name or "", field.value or ""):
                 continue
 
-            for line in (field.value or "").splitlines():
-                if not line_looks_like_name(line):
-                    continue
-
-                name = clean_raidhelper_name(line, mention_lookup)
-
-                if name and not name.lower().startswith(("empty", "none")):
-                    attendees.append(name)
+            attendees.extend(
+                extract_numbered_signup_names(field.value or "", mention_lookup)
+            )
 
     return clean_raidhelper_attendees(attendees)
 
