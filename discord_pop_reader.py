@@ -169,9 +169,12 @@ def line_looks_like_name(line):
     if any(word in lowered for word in blocked):
         return False
 
-    has_signup_marker = "✅" in line or "☑" in line or "<:" in line
+    has_signup_marker = (
+        ":yes:" in lowered
+        or "<:" in line
+    )
     has_numbered_name = bool(
-        re.search(r"^\W*\d{1,2}[\).]?\s+\S+", line)
+        re.search(r"\b\d{1,2}[\).]?\s+\S+", line)
     )
 
     return has_numbered_name or (
@@ -194,6 +197,7 @@ def clean_raidhelper_name(line, mention_lookup):
     line = line.replace("*", "")
     line = line.replace("_", "")
     line = line.replace(">", "")
+    line = re.sub(r":[A-Za-z0-9_]+:", "", line)
     line = line.replace("✅", "")
     line = line.replace("☑", "")
     line = re.sub(r"<a?:[^:>]+:\d+>", "", line)
@@ -264,7 +268,7 @@ def extract_raidhelper_attendees(message):
     )[0]
 
     for match in re.finditer(
-        r"\b\d{1,2}\s+([A-Za-z][A-Za-z0-9'_-]{1,31})",
+        r"\b\d{1,2}\s+([A-Za-z][A-Za-z0-9'_\-()]{1,31})",
         attending_content,
     ):
         attendees.append(match.group(1))
@@ -348,11 +352,14 @@ async def signup_message_sources(channel):
         except discord.DiscordException:
             pass
 
-    return sorted(
-        sources,
+    parent = sources[:1]
+    threads = sorted(
+        sources[1:],
         key=lambda source: getattr(source, "created_at", None),
         reverse=True,
     )
+
+    return parent + threads
 
 
 def source_matches_event(source, event_name):
@@ -496,13 +503,19 @@ async def fetch_raidhelper_attendees(event_name="Friday Sky", limit=500):
 
         print(f"Reading signup channel: {channel.name}")
 
-        sources = await signup_message_sources(channel)
+        all_sources = await signup_message_sources(channel)
         matching_sources = [
             source
-            for source in sources
+            for source in all_sources
             if source_matches_event(source, event_name)
         ]
-        sources = matching_sources or sources
+        other_sources = [
+            source
+            for source in all_sources
+            if source.id != channel.id
+            and source not in matching_sources
+        ]
+        sources = [channel] + matching_sources + other_sources
 
         for source in sources:
             print(f"Scanning signup source: {source.name}")
@@ -603,3 +616,4 @@ async def fetch_raidhelper_debug(limit=50):
     await client.start(token)
 
     return rows
+
