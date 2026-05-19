@@ -2,7 +2,7 @@ import asyncio
 import re
 from pathlib import Path
 import streamlit as st
-from discord_pop_reader import fetch_discord_inventory
+from discord_pop_reader import fetch_discord_inventory, fetch_raidhelper_attendees
 
 try:
     from streamlit_sortables import sort_items
@@ -610,6 +610,26 @@ if st.button("Load Attendee Names"):
     names = names_from_text(manual_attendees)
     add_available_attendees(names)
     st.success(f"Loaded {len(st.session_state.attending_names)} attendee names.")
+
+if st.button("Pull Friday Sky Signups"):
+    with st.spinner("Reading RaidHelper signups..."):
+        try:
+            names = asyncio.run(
+                fetch_raidhelper_attendees(
+                    event_name="Friday Sky",
+                    limit=100,
+                )
+            )
+
+            if names:
+                add_available_attendees(names)
+                st.success(f"Loaded {len(names)} Friday Sky attendees.")
+            else:
+                st.warning("No Friday Sky attendees found in RaidHelper.")
+
+        except Exception as e:
+            st.error("RaidHelper signup read failed.")
+            st.exception(e)
 
 if st.button("Reload Alliance Setup"):
     names = names_from_text(manual_attendees)

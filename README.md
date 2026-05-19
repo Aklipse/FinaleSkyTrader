@@ -14,6 +14,7 @@ Create a local `.env` file with:
 ```env
 DISCORD_TOKEN=your_discord_bot_token
 DISCORD_CHANNEL_ID=your_pop_items_channel_id
+DISCORD_SIGNUP_CHANNEL_ID=1383458990121291837
 ```
 
 ## Streamlit Cloud Secrets
@@ -23,4 +24,5 @@ In Streamlit Cloud, open the app settings and add these secrets:
 ```toml
 DISCORD_TOKEN = "your_discord_bot_token"
 DISCORD_CHANNEL_ID = "your_pop_items_channel_id"
+DISCORD_SIGNUP_CHANNEL_ID = "1383458990121291837"
 ```
