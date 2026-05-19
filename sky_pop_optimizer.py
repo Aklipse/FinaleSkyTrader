@@ -741,16 +741,6 @@ else:
             key="a2_gods",
         )
 
-god_col1, god_col2 = st.columns(2)
-
-with god_col1:
-    st.markdown("**Alliance 1 Gods**")
-    st.write(", ".join(alliance_1_gods) or "None selected")
-
-with god_col2:
-    st.markdown("**Alliance 2 Gods**")
-    st.write(", ".join(alliance_2_gods) or "None selected")
-
 st.markdown("**Member Assignments**")
 
 if st.session_state.attending_names and sort_items is not None:
@@ -829,17 +819,6 @@ else:
     alliance_1_members = []
     alliance_2_members = []
     st.info("Load attendee names above to assign members.")
-
-if st.session_state.attending_names:
-    roster_col1, roster_col2 = st.columns(2)
-
-    with roster_col1:
-        st.markdown("**Alliance 1 Members**")
-        st.write(", ".join(alliance_1_members) or "None selected")
-
-    with roster_col2:
-        st.markdown("**Alliance 2 Members**")
-        st.write(", ".join(alliance_2_members) or "None selected")
 
 st.header("3. Member Trade Orders")
 
