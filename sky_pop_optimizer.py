@@ -115,6 +115,30 @@ def add_available_attendees(names):
         st.session_state.attendee_drag_version += 1
 
 
+def normalize_god_buckets(god_buckets):
+    alliance_1 = [
+        god
+        for god in god_buckets.get("Alliance 1", [])
+        if god in GOD_POP_ITEMS
+    ]
+    alliance_2 = [
+        god
+        for god in god_buckets.get("Alliance 2", [])
+        if god in GOD_POP_ITEMS and god not in alliance_1
+    ]
+    assigned = set(alliance_1 + alliance_2)
+
+    return {
+        "Available Gods": [
+            god
+            for god in GOD_POP_ITEMS
+            if god not in assigned
+        ],
+        "Alliance 1": alliance_1,
+        "Alliance 2": alliance_2,
+    }
+
+
 def inventory_to_rows(inventory):
     rows = []
 
@@ -522,12 +546,21 @@ if "attendee_buckets" not in st.session_state:
 if "attendee_drag_version" not in st.session_state:
     st.session_state.attendee_drag_version = 0
 
+if "god_drag_version" not in st.session_state:
+    st.session_state.god_drag_version = 0
+
 if "god_buckets" not in st.session_state:
     st.session_state.god_buckets = {
         "Available Gods": list(GOD_POP_ITEMS.keys()),
         "Alliance 1": [],
         "Alliance 2": [],
     }
+
+normalized_god_buckets = normalize_god_buckets(st.session_state.god_buckets)
+
+if normalized_god_buckets != st.session_state.god_buckets:
+    st.session_state.god_buckets = normalized_god_buckets
+    st.session_state.god_drag_version += 1
 
 
 st.header("1. Discord Inventory Parse")
@@ -615,7 +648,6 @@ if st.button("Pull Friday Sky Signups", type="primary"):
             if names:
                 add_available_attendees(names)
                 st.success(f"Loaded {len(names)} Friday Sky attendees.")
-                st.write("**Pulled:** " + ", ".join(sort_names(names)))
             else:
                 st.warning("No Friday Sky attendees found in RaidHelper.")
                 debug_rows = asyncio.run(fetch_raidhelper_debug(limit=50))
@@ -660,13 +692,6 @@ if st.button("Add Attendee"):
     else:
         st.warning("Enter a member name first.")
 
-if st.session_state.attending_names:
-    st.write(
-        "**Attendees loaded:** "
-        + ", ".join(st.session_state.attending_names)
-    )
-
-
 st.subheader("Alliance Assignments")
 
 st.markdown("**God Assignments**")
@@ -701,14 +726,14 @@ if sort_items is not None:
         god_buckets,
         multi_containers=True,
         direction="horizontal",
-        key="god_drag_buckets",
+        key=f"god_drag_buckets_{st.session_state.god_drag_version}",
     )
 
     if isinstance(sorted_god_buckets, list):
-        new_god_buckets = {
+        new_god_buckets = normalize_god_buckets({
             bucket.get("header", ""): bucket.get("items", [])
             for bucket in sorted_god_buckets
-        }
+        })
 
         if new_god_buckets != st.session_state.god_buckets:
             st.session_state.god_buckets = new_god_buckets
