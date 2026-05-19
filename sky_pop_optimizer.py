@@ -214,118 +214,6 @@ def display_header():
     )
 
 
-def apply_darkbit_theme():
-    st.markdown(
-        """
-        <style>
-        :root {
-            --db-bg: #050816;
-            --db-surface: #0d1021;
-            --db-surface-2: #14182b;
-            --db-border: rgba(255, 255, 255, 0.12);
-            --db-text: #f7f8ff;
-            --db-muted: #a7abc2;
-            --db-accent: #6c5cff;
-            --db-accent-2: #00d4ff;
-        }
-
-        .stApp {
-            background:
-                linear-gradient(180deg, rgba(108, 92, 255, 0.16), transparent 18rem),
-                var(--db-bg);
-            color: var(--db-text);
-        }
-
-        [data-testid="stHeader"] {
-            background: transparent;
-        }
-
-        .block-container {
-            max-width: 1280px;
-            padding-top: 1.5rem;
-            padding-bottom: 3rem;
-        }
-
-        h1, h2, h3 {
-            color: var(--db-text) !important;
-            letter-spacing: 0 !important;
-        }
-
-        p, label, span {
-            color: inherit;
-            letter-spacing: 0 !important;
-        }
-
-        [data-testid="stImage"] img,
-        [data-testid="stExpander"],
-        [data-testid="stDataFrame"],
-        [data-testid="stDataEditor"] {
-            border: 1px solid var(--db-border);
-            border-radius: 12px;
-            background: rgba(13, 16, 33, 0.86);
-            box-shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
-        }
-
-        [data-testid="stExpander"] summary {
-            color: var(--db-text);
-            font-weight: 700;
-        }
-
-        div[data-testid="stButton"] > button {
-            border-radius: 999px;
-            border: 1px solid var(--db-border);
-            background: var(--db-surface-2);
-            color: var(--db-text);
-            font-weight: 700;
-            min-height: 2.65rem;
-        }
-
-        div[data-testid="stButton"] > button:hover {
-            border-color: rgba(0, 212, 255, 0.72);
-            color: var(--db-text);
-            background: #1a1f38;
-        }
-
-        button[data-testid="stBaseButton-primary"],
-        div[data-testid="stButton"] > button[kind="primary"] {
-            border-color: transparent;
-            background: linear-gradient(135deg, var(--db-accent), #2f8cff 58%, var(--db-accent-2));
-            color: white;
-            box-shadow: 0 12px 30px rgba(108, 92, 255, 0.32);
-        }
-
-        button[data-testid="stBaseButton-primary"]:hover,
-        div[data-testid="stButton"] > button[kind="primary"]:hover {
-            filter: brightness(1.08);
-            color: white;
-        }
-
-        [data-baseweb="input"] {
-            border-radius: 10px;
-            background: var(--db-surface);
-            border-color: var(--db-border);
-        }
-
-        [data-baseweb="input"] input {
-            color: var(--db-text);
-        }
-
-        [data-testid="stAlert"] {
-            border-radius: 12px;
-            border: 1px solid var(--db-border);
-        }
-
-        iframe[title="streamlit_sortables.sort_items"] {
-            border: 1px solid var(--db-border);
-            border-radius: 12px;
-            background: rgba(13, 16, 33, 0.86);
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
 def required_items_for_gods(gods):
     needed = []
 
@@ -657,7 +545,6 @@ st.set_page_config(
 )
 
 
-apply_darkbit_theme()
 display_header()
 
 if "inventory" not in st.session_state:
