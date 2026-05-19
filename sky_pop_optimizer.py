@@ -587,9 +587,7 @@ if st.button("Pull Finale #pop-items", type="primary"):
             st.error("Discord read failed.")
             st.exception(e)
 
-if st.session_state.inventory:
-    st.success("Discord inventory loaded.")
-else:
+if not st.session_state.inventory:
     st.info("Click Pull Finale #pop-items or add members manually below.")
 
 with st.expander("Parsed Discord Inventory", expanded=True):
@@ -660,22 +658,8 @@ if st.button("Pull Friday Sky Signups", type="primary"):
             st.error("RaidHelper signup read failed.")
             st.exception(e)
 
-manual_attendees = st.text_area(
-    "Attendee Names",
-    value="\n".join(st.session_state.attending_names),
-    height=120,
-    placeholder="One name per line",
-    key="manual_attendees",
-)
-
-if st.button("Manualy Load Attendee"):
-    names = names_from_text(manual_attendees)
-    add_available_attendees(names)
-    st.success(f"Loaded {len(st.session_state.attending_names)} attendee names.")
-
 if st.button("Reload Alliance Setup"):
-    names = names_from_text(manual_attendees)
-    reset_attendee_assignments(names)
+    reset_attendee_assignments(st.session_state.attending_names)
     st.success("Alliance assignments reset.")
 
 late_attendee = st.text_input(
