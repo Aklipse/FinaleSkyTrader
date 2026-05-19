@@ -174,11 +174,31 @@ def rows_to_inventory(rows):
     return inventory
 
 
+def blank_inventory_row():
+    row = {"Member": ""}
+
+    for item in ALL_POP_ITEMS:
+        row[item] = False
+
+    return row
+
+
 def normalize_inventory_rows(rows):
     if hasattr(rows, "to_dict"):
-        return rows.to_dict("records")
+        rows = rows.to_dict("records")
 
-    return list(rows)
+    normalized = []
+
+    for row in rows:
+        clean_row = {"Member": str(row.get("Member", "")).strip()}
+
+        for item in ALL_POP_ITEMS:
+            clean_row[item] = bool(row.get(item, False))
+
+        if clean_row["Member"] or any(clean_row[item] for item in ALL_POP_ITEMS):
+            normalized.append(clean_row)
+
+    return normalized
 
 
 def display_header():
@@ -533,6 +553,9 @@ if "inventory" not in st.session_state:
 if "inventory_rows" not in st.session_state:
     st.session_state.inventory_rows = []
 
+if "inventory_editor_version" not in st.session_state:
+    st.session_state.inventory_editor_version = 0
+
 if "attending_names" not in st.session_state:
     st.session_state.attending_names = []
 
@@ -574,6 +597,7 @@ if st.button("Pull Finale #pop-items", type="primary"):
             st.session_state.inventory_rows = inventory_to_rows(
                 st.session_state.inventory
             )
+            st.session_state.inventory_editor_version += 1
 
             if st.session_state.inventory:
                 st.success("Discord inventory loaded.")
@@ -596,15 +620,11 @@ with st.expander("Parsed Discord Inventory", expanded=True):
             st.session_state.inventory
         )
 
-    inventory_rows = st.session_state.inventory_rows
-
-    if not inventory_rows:
-        blank_row = {"Member": ""}
-
-        for item in ALL_POP_ITEMS:
-            blank_row[item] = False
-
-        inventory_rows = [blank_row]
+    inventory_rows = (
+        st.session_state.inventory_rows
+        if st.session_state.inventory_rows
+        else [blank_inventory_row()]
+    )
 
     edited_inventory_rows = st.data_editor(
         inventory_rows,
@@ -620,14 +640,17 @@ with st.expander("Parsed Discord Inventory", expanded=True):
                 for item in ALL_POP_ITEMS
             },
         },
-        key="inventory_editor",
+        key=f"inventory_editor_{st.session_state.inventory_editor_version}",
     )
-    st.session_state.inventory_rows = normalize_inventory_rows(
-        edited_inventory_rows
-    )
-    st.session_state.inventory = rows_to_inventory(edited_inventory_rows)
 
     if st.button("Apply Inventory Edits"):
+        st.session_state.inventory_rows = normalize_inventory_rows(
+            edited_inventory_rows
+        )
+        st.session_state.inventory = rows_to_inventory(
+            st.session_state.inventory_rows
+        )
+        st.session_state.inventory_editor_version += 1
         st.success("Inventory edits applied.")
 
 
@@ -832,7 +855,9 @@ else:
 st.header("3. Member Trade Orders")
 
 if st.button("Generate Trade Plan"):
-    inventory = rows_to_inventory(st.session_state.inventory_rows)
+    current_inventory_rows = normalize_inventory_rows(edited_inventory_rows)
+    st.session_state.inventory_rows = current_inventory_rows
+    inventory = rows_to_inventory(current_inventory_rows)
     st.session_state.inventory = inventory
 
     if not inventory:
