@@ -1,6 +1,9 @@
 import asyncio
+import base64
+import json
 import re
 from pathlib import Path
+import zlib
 import streamlit as st
 from discord_pop_reader import (
     fetch_discord_inventory,
@@ -29,6 +32,7 @@ ITEM_TO_GOD = {
 ALL_POP_ITEMS = list(ITEM_TO_GOD.keys())
 BASE_DIR = Path(__file__).resolve().parent if "__file__" in globals() else Path.cwd()
 HEADER_BACKGROUND_IMAGE = BASE_DIR / "sky.png"
+SHARE_BASE_URL = "https://finaleskytrade.streamlit.app/"
 
 def dedupe_names(names):
     seen = set()
@@ -230,6 +234,106 @@ def normalize_inventory_rows(rows):
             normalized.append(clean_row)
 
     return normalized
+
+
+def inventory_rows_to_share_rows(rows):
+    share_rows = []
+
+    for row in normalize_inventory_rows(rows):
+        share_rows.append([
+            row["Member"],
+            [
+                index
+                for index, item in enumerate(ALL_POP_ITEMS)
+                if row.get(item, False)
+            ],
+        ])
+
+    return share_rows
+
+
+def share_rows_to_inventory_rows(share_rows):
+    rows = []
+
+    for share_row in share_rows:
+        if not isinstance(share_row, list) or len(share_row) != 2:
+            continue
+
+        member = str(share_row[0]).strip()
+        item_indexes = share_row[1] if isinstance(share_row[1], list) else []
+        row = {"Member": member}
+
+        for index, item in enumerate(ALL_POP_ITEMS):
+            row[item] = index in item_indexes
+
+        if member:
+            rows.append(row)
+
+    return normalize_inventory_rows(rows)
+
+
+def encode_share_setup(inventory_rows, show_plan=False):
+    payload = {
+        "v": 1,
+        "i": inventory_rows_to_share_rows(inventory_rows),
+        "a": st.session_state.attending_names,
+        "ab": st.session_state.attendee_buckets,
+        "gb": st.session_state.god_buckets,
+        "p": bool(show_plan),
+    }
+    payload_json = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    compressed = zlib.compress(payload_json)
+
+    return base64.urlsafe_b64encode(compressed).decode("ascii").rstrip("=")
+
+
+def decode_share_setup(token):
+    padded_token = token + ("=" * (-len(token) % 4))
+    payload_json = zlib.decompress(
+        base64.urlsafe_b64decode(padded_token)
+    ).decode("utf-8")
+
+    return json.loads(payload_json)
+
+
+def get_share_token():
+    token = st.query_params.get("setup")
+
+    if isinstance(token, list):
+        token = token[0] if token else ""
+
+    return str(token or "").strip()
+
+
+def build_share_url(token):
+    return f"{SHARE_BASE_URL}?setup={token}"
+
+
+def hydrate_shared_setup(token):
+    payload = decode_share_setup(token)
+
+    if payload.get("v") != 1:
+        raise ValueError("Unsupported shared setup version.")
+
+    inventory_rows = share_rows_to_inventory_rows(payload.get("i", []))
+    attending_names = sort_names(payload.get("a", []))
+    attendee_buckets = normalize_attendee_buckets(
+        payload.get("ab", {}),
+        attending_names,
+    )
+    god_buckets = normalize_god_buckets(payload.get("gb", {}))
+
+    st.session_state.inventory_rows = inventory_rows
+    st.session_state.inventory = rows_to_inventory(inventory_rows)
+    st.session_state.inventory_editor_version += 1
+    st.session_state.attending_names = attending_names
+    st.session_state.attendee_buckets = attendee_buckets
+    st.session_state.attendee_drag_version += 1
+    st.session_state.god_buckets = god_buckets
+    st.session_state.god_drag_version += 1
+    st.session_state.trade_plan = None
+    st.session_state.loaded_share_token = token
+    st.session_state.shared_should_show_plan = bool(payload.get("p", False))
 
 
 def display_header():
@@ -569,6 +673,96 @@ def display_results(title, gods, results):
             )
 
 
+def generate_trade_plan(
+    inventory_rows,
+    alliance_1_gods,
+    alliance_1_members,
+    alliance_2_gods,
+    alliance_2_members,
+):
+    inventory = rows_to_inventory(inventory_rows)
+    planned_inventory = copy_inventory(inventory)
+
+    a1_results = optimize_alliance(
+        alliance_1_gods,
+        alliance_1_members,
+        alliance_2_gods,
+        alliance_2_members,
+        planned_inventory,
+    )
+
+    a2_results = optimize_alliance(
+        alliance_2_gods,
+        alliance_2_members,
+        alliance_1_gods,
+        alliance_1_members,
+        planned_inventory,
+    )
+
+    return {
+        "alliance_1_gods": list(alliance_1_gods),
+        "alliance_2_gods": list(alliance_2_gods),
+        "alliance_1_members": list(alliance_1_members),
+        "alliance_2_members": list(alliance_2_members),
+        "a1_results": a1_results,
+        "a2_results": a2_results,
+        "a1_outgoing_orders": build_member_trade_orders(
+            "Alliance 2",
+            a2_results,
+        ),
+        "a2_outgoing_orders": build_member_trade_orders(
+            "Alliance 1",
+            a1_results,
+        ),
+    }
+
+
+def display_trade_plan(trade_plan):
+    ocol1, ocol2 = st.columns(2)
+
+    with ocol1:
+        display_member_trade_orders(
+            "Alliance 1 members trading to Alliance 2",
+            trade_plan["a1_outgoing_orders"],
+        )
+
+    with ocol2:
+        display_member_trade_orders(
+            "Alliance 2 members trading to Alliance 1",
+            trade_plan["a2_outgoing_orders"],
+        )
+
+    with st.expander("Trade Plan Details", expanded=False):
+        rcol1, rcol2 = st.columns(2)
+
+        with rcol1:
+            display_results(
+                "Alliance 1",
+                trade_plan["alliance_1_gods"],
+                trade_plan["a1_results"],
+            )
+
+        with rcol2:
+            display_results(
+                "Alliance 2",
+                trade_plan["alliance_2_gods"],
+                trade_plan["a2_results"],
+            )
+
+
+def display_share_url(inventory_rows):
+    token = encode_share_setup(inventory_rows, show_plan=True)
+    share_url = build_share_url(token)
+
+    st.subheader("Share This Setup")
+    st.markdown(f"[Open shareable setup link]({share_url})")
+    st.text_input(
+        "Discord share link",
+        value=share_url,
+        key=f"share_url_display_{token[:16]}",
+    )
+
+
 st.set_page_config(
     page_title="Sky Pop Trade Optimizer",
     page_icon="🗿",
@@ -610,6 +804,26 @@ if "god_buckets" not in st.session_state:
         "Alliance 2": [],
     }
 
+if "trade_plan" not in st.session_state:
+    st.session_state.trade_plan = None
+
+if "loaded_share_token" not in st.session_state:
+    st.session_state.loaded_share_token = ""
+
+if "shared_should_show_plan" not in st.session_state:
+    st.session_state.shared_should_show_plan = False
+
+share_token = get_share_token()
+
+if share_token and share_token != st.session_state.loaded_share_token:
+    try:
+        hydrate_shared_setup(share_token)
+        st.success("Loaded shared setup from the URL.")
+    except Exception as e:
+        st.session_state.loaded_share_token = share_token
+        st.error("This shared setup link could not be loaded.")
+        st.exception(e)
+
 normalized_attendee_buckets = normalize_attendee_buckets(
     st.session_state.attendee_buckets,
     st.session_state.attending_names,
@@ -638,6 +852,8 @@ if st.button("Pull Finale #pop-items", type="primary"):
                 st.session_state.inventory
             )
             st.session_state.inventory_editor_version += 1
+            st.session_state.trade_plan = None
+            st.session_state.shared_should_show_plan = False
 
             if st.session_state.inventory:
                 st.success("Discord inventory loaded.")
@@ -682,15 +898,23 @@ with st.expander("Parsed Discord Inventory", expanded=True):
         },
         key=f"inventory_editor_{st.session_state.inventory_editor_version}",
     )
+    edited_inventory_snapshot = normalize_inventory_rows(edited_inventory_rows)
+
+    if (
+        st.session_state.trade_plan is not None
+        and edited_inventory_snapshot != st.session_state.inventory_rows
+    ):
+        st.session_state.trade_plan = None
+        st.session_state.shared_should_show_plan = False
 
     if st.button("Apply Inventory Edits"):
-        st.session_state.inventory_rows = normalize_inventory_rows(
-            edited_inventory_rows
-        )
+        st.session_state.inventory_rows = edited_inventory_snapshot
         st.session_state.inventory = rows_to_inventory(
             st.session_state.inventory_rows
         )
         st.session_state.inventory_editor_version += 1
+        st.session_state.trade_plan = None
+        st.session_state.shared_should_show_plan = False
         st.success("Inventory edits applied.")
 
 
@@ -708,6 +932,8 @@ if st.button("Pull Friday Sky Signups", type="primary"):
 
             if names:
                 add_available_attendees(names)
+                st.session_state.trade_plan = None
+                st.session_state.shared_should_show_plan = False
                 st.success(f"Loaded {len(names)} Friday Sky attendees.")
             else:
                 st.warning("No Friday Sky attendees found in RaidHelper.")
@@ -723,6 +949,8 @@ if st.button("Pull Friday Sky Signups", type="primary"):
 
 if st.button("Reload Alliance Setup"):
     reset_attendee_assignments(st.session_state.attending_names)
+    st.session_state.trade_plan = None
+    st.session_state.shared_should_show_plan = False
     st.success("Alliance assignments reset.")
 
 late_attendee = st.text_input(
@@ -735,6 +963,8 @@ if st.button("Add Attendee"):
 
     if names:
         add_available_attendees(names)
+        st.session_state.trade_plan = None
+        st.session_state.shared_should_show_plan = False
         st.success(f"Added {', '.join(names)}.")
     else:
         st.warning("Enter a member name first.")
@@ -784,6 +1014,8 @@ if sort_items is not None:
 
         if new_god_buckets != st.session_state.god_buckets:
             st.session_state.god_buckets = new_god_buckets
+            st.session_state.trade_plan = None
+            st.session_state.shared_should_show_plan = False
 
     alliance_1_gods = st.session_state.god_buckets.get("Alliance 1", [])
     alliance_2_gods = st.session_state.god_buckets.get("Alliance 2", [])
@@ -860,6 +1092,8 @@ if st.session_state.attending_names and sort_items is not None:
         if new_attendee_buckets != st.session_state.attendee_buckets:
             st.session_state.attendee_buckets = new_attendee_buckets
             st.session_state.attendee_drag_version += 1
+            st.session_state.trade_plan = None
+            st.session_state.shared_should_show_plan = False
             st.rerun()
 
     alliance_1_members = sort_names(
@@ -908,53 +1142,39 @@ if st.button("Generate Trade Plan"):
     if not inventory:
         st.error("Load Discord inventory first.")
     else:
-        planned_inventory = copy_inventory(inventory)
-
-        a1_results = optimize_alliance(
+        st.session_state.trade_plan = generate_trade_plan(
+            current_inventory_rows,
             alliance_1_gods,
             alliance_1_members,
             alliance_2_gods,
             alliance_2_members,
-            planned_inventory,
         )
+        st.session_state.shared_should_show_plan = True
 
-        a2_results = optimize_alliance(
-            alliance_2_gods,
-            alliance_2_members,
+if st.session_state.shared_should_show_plan and st.session_state.trade_plan is None:
+    shared_inventory_rows = normalize_inventory_rows(st.session_state.inventory_rows)
+
+    if shared_inventory_rows:
+        st.session_state.trade_plan = generate_trade_plan(
+            shared_inventory_rows,
             alliance_1_gods,
             alliance_1_members,
-            planned_inventory,
+            alliance_2_gods,
+            alliance_2_members,
         )
 
-        a1_outgoing_orders = build_member_trade_orders(
-            "Alliance 2",
-            a2_results,
-        )
+if st.session_state.trade_plan is not None:
+    plan_is_current = (
+        st.session_state.trade_plan.get("alliance_1_gods") == list(alliance_1_gods)
+        and st.session_state.trade_plan.get("alliance_2_gods") == list(alliance_2_gods)
+        and st.session_state.trade_plan.get("alliance_1_members") == list(alliance_1_members)
+        and st.session_state.trade_plan.get("alliance_2_members") == list(alliance_2_members)
+    )
 
-        a2_outgoing_orders = build_member_trade_orders(
-            "Alliance 1",
-            a1_results,
-        )
+    if not plan_is_current:
+        st.session_state.trade_plan = None
+        st.session_state.shared_should_show_plan = False
 
-        ocol1, ocol2 = st.columns(2)
-
-        with ocol1:
-            display_member_trade_orders(
-                "Alliance 1 members trading to Alliance 2",
-                a1_outgoing_orders,
-            )
-
-        with ocol2:
-            display_member_trade_orders(
-                "Alliance 2 members trading to Alliance 1",
-                a2_outgoing_orders,
-            )
-
-        with st.expander("Trade Plan Details", expanded=False):
-            rcol1, rcol2 = st.columns(2)
-
-            with rcol1:
-                display_results("Alliance 1", alliance_1_gods, a1_results)
-
-            with rcol2:
-                display_results("Alliance 2", alliance_2_gods, a2_results)
+if st.session_state.trade_plan is not None:
+    display_share_url(st.session_state.inventory_rows)
+    display_trade_plan(st.session_state.trade_plan)
