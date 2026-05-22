@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 import zlib
 import streamlit as st
+import streamlit.components.v1 as components
 from discord_pop_reader import (
     fetch_discord_inventory,
     fetch_raidhelper_attendees,
@@ -302,10 +303,6 @@ def get_share_token():
 
 def build_share_url(token):
     return f"{SHARE_BASE_URL}?setup={token}"
-
-
-def build_relative_share_url(token):
-    return f"?setup={token}"
 
 
 def set_browser_share_url(token):
@@ -759,20 +756,50 @@ def display_trade_plan(trade_plan):
 def display_share_url(inventory_rows):
     token = encode_share_setup(inventory_rows, show_plan=True)
     share_url = build_share_url(token)
-    relative_share_url = build_relative_share_url(token)
 
     st.subheader("Share This Setup")
-    st.success("This page URL now includes the saved setup.")
-    st.link_button("Open this saved setup", relative_share_url)
-    st.caption(
-        "Use the Discord share link after the latest code is deployed to Streamlit Cloud."
+    components.html(
+        f"""
+        <button
+            id="copy-setup-link"
+            style="
+                background: #7c3aed;
+                border: 0;
+                border-radius: 6px;
+                color: white;
+                cursor: pointer;
+                font: 600 14px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                padding: 0.55rem 0.9rem;
+            "
+            type="button"
+        >
+            Copy Setup Link
+        </button>
+        <script>
+            const button = document.getElementById("copy-setup-link");
+            const setupLink = {json.dumps(share_url)};
+
+            button.addEventListener("click", async () => {{
+                try {{
+                    await navigator.clipboard.writeText(setupLink);
+                }} catch (error) {{
+                    const input = document.createElement("input");
+                    input.value = setupLink;
+                    document.body.appendChild(input);
+                    input.select();
+                    document.execCommand("copy");
+                    input.remove();
+                }}
+
+                button.textContent = "Copied";
+                window.setTimeout(() => {{
+                    button.textContent = "Copy Setup Link";
+                }}, 1600);
+            }});
+        </script>
+        """,
+        height=48,
     )
-    st.text_input(
-        "Discord share link",
-        value=share_url,
-        key=f"share_url_display_{token[:16]}",
-    )
-    st.code(share_url, language=None)
 
 
 st.set_page_config(
