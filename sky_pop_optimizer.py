@@ -304,6 +304,10 @@ def build_share_url(token):
     return f"{SHARE_BASE_URL}?setup={token}"
 
 
+def build_relative_share_url(token):
+    return f"?setup={token}"
+
+
 def set_browser_share_url(token):
     st.session_state.loaded_share_token = token
 
@@ -755,10 +759,14 @@ def display_trade_plan(trade_plan):
 def display_share_url(inventory_rows):
     token = encode_share_setup(inventory_rows, show_plan=True)
     share_url = build_share_url(token)
+    relative_share_url = build_relative_share_url(token)
 
     st.subheader("Share This Setup")
     st.success("This page URL now includes the saved setup.")
-    st.link_button("Open shareable setup link", share_url)
+    st.link_button("Open this saved setup", relative_share_url)
+    st.caption(
+        "Use the Discord share link after the latest code is deployed to Streamlit Cloud."
+    )
     st.text_input(
         "Discord share link",
         value=share_url,
@@ -1052,36 +1060,52 @@ if st.session_state.attending_names:
     }
     alliance_1_members = []
     alliance_2_members = []
+    assignments_by_name = {}
 
-    hcol1, hcol2 = st.columns([2, 3])
-    hcol1.markdown("**Member**")
-    hcol2.markdown("**Assignment**")
-
-    for index, name in enumerate(attendee_options):
-        key = f"attendee_assignment_{st.session_state.attendee_drag_version}_{index}"
-
+    for name in attendee_options:
         if name.lower() in existing_alliance_1_lookup:
-            default_index = 1
+            assignment = "A1"
         elif name.lower() in existing_alliance_2_lookup:
-            default_index = 2
+            assignment = "A2"
         else:
-            default_index = 0
+            assignment = "Available"
 
-        rcol1, rcol2 = st.columns([2, 3])
-        rcol1.write(name)
-        assignment = rcol2.radio(
-            f"{name} alliance assignment",
-            options=["Available", "A1", "A2"],
-            index=default_index,
-            horizontal=True,
-            label_visibility="collapsed",
-            key=key,
-        )
+        assignments_by_name[name] = assignment
 
-        if assignment == "A1":
-            alliance_1_members.append(name)
-        elif assignment == "A2":
-            alliance_2_members.append(name)
+    for row_start in range(0, len(attendee_options), 6):
+        row_columns = st.columns(6)
+
+        for column_index, column in enumerate(row_columns):
+            attendee_index = row_start + column_index
+
+            if attendee_index >= len(attendee_options):
+                continue
+
+            name = attendee_options[attendee_index]
+            current_assignment = assignments_by_name.get(name, "A1")
+            radio_index = 1 if current_assignment == "A2" else 0
+
+            with column:
+                st.markdown(
+                    f"<span style='color: #16a34a; font-weight: 700;'>{name}</span>",
+                    unsafe_allow_html=True,
+                )
+                assignment = st.radio(
+                    f"{name} alliance assignment",
+                    options=["A1", "A2"],
+                    index=radio_index,
+                    horizontal=True,
+                    label_visibility="collapsed",
+                    key=(
+                        "attendee_assignment_"
+                        f"{st.session_state.attendee_drag_version}_{attendee_index}"
+                    ),
+                )
+
+            if assignment == "A1":
+                alliance_1_members.append(name)
+            elif assignment == "A2":
+                alliance_2_members.append(name)
 
     alliance_1_members = sort_names(alliance_1_members)
     alliance_2_members = sort_names(alliance_2_members)
