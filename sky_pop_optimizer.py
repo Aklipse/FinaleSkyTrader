@@ -753,11 +753,10 @@ def display_trade_plan(trade_plan):
             )
 
 
-def display_share_url(inventory_rows):
+def display_copy_setup_button(inventory_rows):
     token = encode_share_setup(inventory_rows, show_plan=True)
     share_url = build_share_url(token)
 
-    st.subheader("Share This Setup")
     components.html(
         f"""
         <button
@@ -1168,7 +1167,41 @@ else:
 
 st.header("3. Member Trade Orders")
 
-if st.button("Generate Trade Plan"):
+st.markdown(
+    """
+    <style>
+    div[data-testid="stButton"] button[kind="primary"] {
+        background: #f97316;
+        border-color: #f97316;
+        color: white;
+    }
+
+    div[data-testid="stButton"] button[kind="primary"]:hover {
+        background: #ea580c;
+        border-color: #ea580c;
+        color: white;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+action_col, share_col = st.columns([1, 5], vertical_alignment="center")
+
+with action_col:
+    generate_trade_plan_clicked = st.button(
+        "Generate Trade Plan",
+        type="primary",
+    )
+
+with share_col:
+    copy_setup_button_slot = st.empty()
+
+with copy_setup_button_slot.container():
+    if st.session_state.trade_plan is not None:
+        display_copy_setup_button(st.session_state.inventory_rows)
+
+if generate_trade_plan_clicked:
     current_inventory_rows = normalize_inventory_rows(edited_inventory_rows)
     st.session_state.inventory_rows = current_inventory_rows
     inventory = rows_to_inventory(current_inventory_rows)
@@ -1188,6 +1221,9 @@ if st.button("Generate Trade Plan"):
         set_browser_share_url(
             encode_share_setup(current_inventory_rows, show_plan=True)
         )
+
+        with copy_setup_button_slot.container():
+            display_copy_setup_button(st.session_state.inventory_rows)
 
 if st.session_state.shared_should_show_plan and st.session_state.trade_plan is None:
     shared_inventory_rows = normalize_inventory_rows(st.session_state.inventory_rows)
@@ -1214,5 +1250,4 @@ if st.session_state.trade_plan is not None:
         st.session_state.shared_should_show_plan = False
 
 if st.session_state.trade_plan is not None:
-    display_share_url(st.session_state.inventory_rows)
     display_trade_plan(st.session_state.trade_plan)
