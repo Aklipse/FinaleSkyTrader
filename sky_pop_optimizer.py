@@ -309,6 +309,13 @@ def build_share_url(token):
     return f"{SHARE_BASE_URL}?setup={token}"
 
 
+def set_browser_share_url(token):
+    st.session_state.loaded_share_token = token
+
+    if get_share_token() != token:
+        st.query_params["setup"] = token
+
+
 def hydrate_shared_setup(token):
     payload = decode_share_setup(token)
 
@@ -755,12 +762,14 @@ def display_share_url(inventory_rows):
     share_url = build_share_url(token)
 
     st.subheader("Share This Setup")
-    st.markdown(f"[Open shareable setup link]({share_url})")
+    st.success("This page URL now includes the saved setup.")
+    st.link_button("Open shareable setup link", share_url)
     st.text_input(
         "Discord share link",
         value=share_url,
         key=f"share_url_display_{token[:16]}",
     )
+    st.code(share_url, language=None)
 
 
 st.set_page_config(
@@ -1139,6 +1148,9 @@ if st.button("Generate Trade Plan"):
             alliance_2_members,
         )
         st.session_state.shared_should_show_plan = True
+        set_browser_share_url(
+            encode_share_setup(current_inventory_rows, show_plan=True)
+        )
 
 if st.session_state.shared_should_show_plan and st.session_state.trade_plan is None:
     shared_inventory_rows = normalize_inventory_rows(st.session_state.inventory_rows)
