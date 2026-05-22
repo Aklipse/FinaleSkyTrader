@@ -115,6 +115,37 @@ def add_available_attendees(names):
         st.session_state.attendee_drag_version += 1
 
 
+def normalize_attendee_buckets(attendee_buckets, attending_names):
+    attending_names = sort_names(attending_names)
+    attending_by_key = {name.lower(): name for name in attending_names}
+    used_keys = set()
+    normalized = {}
+
+    for bucket_name in ("Alliance 1", "Alliance 2"):
+        normalized[bucket_name] = []
+
+        for name in attendee_buckets.get(bucket_name, []):
+            key = str(name).strip().lower()
+
+            if key in attending_by_key and key not in used_keys:
+                normalized[bucket_name].append(attending_by_key[key])
+                used_keys.add(key)
+
+        normalized[bucket_name] = sort_names(normalized[bucket_name])
+
+    normalized["Available attendees"] = [
+        name
+        for name in attending_names
+        if name.lower() not in used_keys
+    ]
+
+    return {
+        "Available attendees": normalized["Available attendees"],
+        "Alliance 1": normalized["Alliance 1"],
+        "Alliance 2": normalized["Alliance 2"],
+    }
+
+
 def normalize_god_buckets(god_buckets):
     alliance_1 = [
         god
@@ -579,6 +610,15 @@ if "god_buckets" not in st.session_state:
         "Alliance 2": [],
     }
 
+normalized_attendee_buckets = normalize_attendee_buckets(
+    st.session_state.attendee_buckets,
+    st.session_state.attending_names,
+)
+
+if normalized_attendee_buckets != st.session_state.attendee_buckets:
+    st.session_state.attendee_buckets = normalized_attendee_buckets
+    st.session_state.attendee_drag_version += 1
+
 normalized_god_buckets = normalize_god_buckets(st.session_state.god_buckets)
 
 if normalized_god_buckets != st.session_state.god_buckets:
@@ -809,13 +849,18 @@ if st.session_state.attending_names and sort_items is not None:
     )
 
     if isinstance(sorted_buckets, list):
-        new_attendee_buckets = {
-            bucket.get("header", ""): bucket.get("items", [])
-            for bucket in sorted_buckets
-        }
+        new_attendee_buckets = normalize_attendee_buckets(
+            {
+                bucket.get("header", ""): bucket.get("items", [])
+                for bucket in sorted_buckets
+            },
+            st.session_state.attending_names,
+        )
 
         if new_attendee_buckets != st.session_state.attendee_buckets:
             st.session_state.attendee_buckets = new_attendee_buckets
+            st.session_state.attendee_drag_version += 1
+            st.rerun()
 
     alliance_1_members = sort_names(
         st.session_state.attendee_buckets.get("Alliance 1", [])
