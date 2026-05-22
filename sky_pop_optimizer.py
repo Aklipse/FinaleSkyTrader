@@ -11,11 +11,6 @@ from discord_pop_reader import (
     fetch_raidhelper_debug,
 )
 
-try:
-    from streamlit_sortables import sort_items
-except ImportError:
-    sort_items = None
-
 
 GOD_POP_ITEMS = {
     "Seiryu": ["Gem of the East", "Springstone"],
@@ -982,122 +977,113 @@ st.subheader("Alliance Assignments")
 
 st.markdown("**God Assignments**")
 
-if sort_items is not None:
-    existing_god_buckets = st.session_state.god_buckets
-    assigned_gods = (
-        existing_god_buckets.get("Alliance 1", [])
-        + existing_god_buckets.get("Alliance 2", [])
-    )
-    available_gods = [
-        god
-        for god in GOD_POP_ITEMS
-        if god not in assigned_gods
-    ]
-    god_buckets = [
-        {
-            "header": "Available Gods",
-            "items": available_gods,
-        },
-        {
-            "header": "Alliance 1",
-            "items": existing_god_buckets.get("Alliance 1", []),
-        },
-        {
-            "header": "Alliance 2",
-            "items": existing_god_buckets.get("Alliance 2", []),
-        },
-    ]
+existing_god_buckets = st.session_state.god_buckets
+existing_alliance_1_gods = [
+    god
+    for god in existing_god_buckets.get("Alliance 1", [])
+    if god in GOD_POP_ITEMS
+]
+existing_alliance_2_gods = [
+    god
+    for god in existing_god_buckets.get("Alliance 2", [])
+    if god in GOD_POP_ITEMS and god not in existing_alliance_1_gods
+]
+col1, col2 = st.columns(2)
 
-    sorted_god_buckets = sort_items(
-        god_buckets,
-        multi_containers=True,
-        direction="horizontal",
-        key=f"god_drag_buckets_{st.session_state.god_drag_version}",
+with col1:
+    alliance_1_gods = st.multiselect(
+        "Alliance 1 Gods",
+        options=list(GOD_POP_ITEMS.keys()),
+        default=existing_alliance_1_gods,
+        key=f"a1_gods_{st.session_state.god_drag_version}",
     )
 
-    if isinstance(sorted_god_buckets, list):
-        new_god_buckets = normalize_god_buckets({
-            bucket.get("header", ""): bucket.get("items", [])
-            for bucket in sorted_god_buckets
-        })
-
-        if new_god_buckets != st.session_state.god_buckets:
-            st.session_state.god_buckets = new_god_buckets
-            st.session_state.trade_plan = None
-            st.session_state.shared_should_show_plan = False
-
-    alliance_1_gods = st.session_state.god_buckets.get("Alliance 1", [])
-    alliance_2_gods = st.session_state.god_buckets.get("Alliance 2", [])
-
-else:
-    st.warning(
-        "Drag-and-drop requires streamlit-sortables. "
-        "Using multi-select god assignment instead."
+with col2:
+    alliance_2_gods = st.multiselect(
+        "Alliance 2 Gods",
+        options=[
+            god
+            for god in GOD_POP_ITEMS
+            if god not in alliance_1_gods
+        ],
+        default=[
+            god
+            for god in existing_alliance_2_gods
+            if god not in alliance_1_gods
+        ],
+        key=f"a2_gods_{st.session_state.god_drag_version}",
     )
-    col1, col2 = st.columns(2)
 
-    with col1:
-        alliance_1_gods = st.multiselect(
-            "Alliance 1 Gods",
-            options=list(GOD_POP_ITEMS.keys()),
-            key="a1_gods",
-        )
+alliance_1_gods = list(
+    st.session_state[f"a1_gods_{st.session_state.god_drag_version}"]
+)
+alliance_2_gods = list(alliance_2_gods)
+available_gods = [
+    god
+    for god in GOD_POP_ITEMS
+    if god not in alliance_1_gods and god not in alliance_2_gods
+]
 
-    with col2:
-        alliance_2_gods = st.multiselect(
-            "Alliance 2 Gods",
-            options=[
-                god
-                for god in GOD_POP_ITEMS
-                if god not in alliance_1_gods
-            ],
-            key="a2_gods",
-        )
+if available_gods:
+    st.markdown("**Available gods:** " + ", ".join(available_gods))
+
+new_god_buckets = normalize_god_buckets({
+    "Alliance 1": alliance_1_gods,
+    "Alliance 2": alliance_2_gods,
+})
+
+if new_god_buckets != st.session_state.god_buckets:
+    st.session_state.god_buckets = new_god_buckets
+    st.session_state.trade_plan = None
+    st.session_state.shared_should_show_plan = False
 
 st.markdown("**Member Assignments**")
 
 if st.session_state.attending_names:
     attendee_options = sort_names(st.session_state.attending_names)
     existing_attendee_buckets = st.session_state.attendee_buckets
-    existing_alliance_1_members = [
-        name
-        for name in sort_names(existing_attendee_buckets.get("Alliance 1", []))
-        if name in attendee_options
-    ]
-    existing_alliance_2_members = [
-        name
-        for name in sort_names(existing_attendee_buckets.get("Alliance 2", []))
-        if name in attendee_options and name not in existing_alliance_1_members
-    ]
-    mcol1, mcol2 = st.columns(2)
+    existing_alliance_1_lookup = {
+        name.lower()
+        for name in existing_attendee_buckets.get("Alliance 1", [])
+    }
+    existing_alliance_2_lookup = {
+        name.lower()
+        for name in existing_attendee_buckets.get("Alliance 2", [])
+    }
+    alliance_1_members = []
+    alliance_2_members = []
 
-    with mcol1:
-        alliance_1_members = st.multiselect(
-            "Alliance 1 Members",
-            options=attendee_options,
-            default=existing_alliance_1_members,
-            key=f"a1_attendees_{st.session_state.attendee_drag_version}",
+    hcol1, hcol2 = st.columns([2, 3])
+    hcol1.markdown("**Member**")
+    hcol2.markdown("**Assignment**")
+
+    for index, name in enumerate(attendee_options):
+        key = f"attendee_assignment_{st.session_state.attendee_drag_version}_{index}"
+
+        if name.lower() in existing_alliance_1_lookup:
+            default_index = 1
+        elif name.lower() in existing_alliance_2_lookup:
+            default_index = 2
+        else:
+            default_index = 0
+
+        rcol1, rcol2 = st.columns([2, 3])
+        rcol1.write(name)
+        assignment = rcol2.radio(
+            f"{name} alliance assignment",
+            options=["Available", "A1", "A2"],
+            index=default_index,
+            horizontal=True,
+            label_visibility="collapsed",
+            key=key,
         )
 
-    with mcol2:
-        alliance_2_members = st.multiselect(
-            "Alliance 2 Members",
-            options=[
-                name
-                for name in attendee_options
-                if name not in alliance_1_members
-            ],
-            default=[
-                name
-                for name in existing_alliance_2_members
-                if name not in alliance_1_members
-            ],
-            key=f"a2_attendees_{st.session_state.attendee_drag_version}",
-        )
+        if assignment == "A1":
+            alliance_1_members.append(name)
+        elif assignment == "A2":
+            alliance_2_members.append(name)
 
-    alliance_1_members = sort_names(
-        st.session_state[f"a1_attendees_{st.session_state.attendee_drag_version}"]
-    )
+    alliance_1_members = sort_names(alliance_1_members)
     alliance_2_members = sort_names(alliance_2_members)
     available_attendees = [
         name
