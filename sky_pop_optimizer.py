@@ -1047,84 +1047,73 @@ else:
 
 st.markdown("**Member Assignments**")
 
-if st.session_state.attending_names and sort_items is not None:
-    existing_buckets = st.session_state.attendee_buckets
-    assigned_names = (
-        existing_buckets.get("Alliance 1", [])
-        + existing_buckets.get("Alliance 2", [])
-    )
-    available_names = [
+if st.session_state.attending_names:
+    attendee_options = sort_names(st.session_state.attending_names)
+    existing_attendee_buckets = st.session_state.attendee_buckets
+    existing_alliance_1_members = [
         name
-        for name in st.session_state.attending_names
-        if name.lower() not in {n.lower() for n in assigned_names}
+        for name in sort_names(existing_attendee_buckets.get("Alliance 1", []))
+        if name in attendee_options
     ]
-    attendee_buckets = [
-        {
-            "header": "Available attendees",
-            "items": available_names,
-        },
-        {
-            "header": "Alliance 1",
-            "items": existing_buckets.get("Alliance 1", []),
-        },
-        {
-            "header": "Alliance 2",
-            "items": existing_buckets.get("Alliance 2", []),
-        },
+    existing_alliance_2_members = [
+        name
+        for name in sort_names(existing_attendee_buckets.get("Alliance 2", []))
+        if name in attendee_options and name not in existing_alliance_1_members
     ]
+    mcol1, mcol2 = st.columns(2)
 
-    sorted_buckets = sort_items(
-        attendee_buckets,
-        multi_containers=True,
-        direction="horizontal",
-        key=f"attendee_drag_buckets_{st.session_state.attendee_drag_version}",
-    )
-
-    if isinstance(sorted_buckets, list):
-        new_attendee_buckets = normalize_attendee_buckets(
-            {
-                bucket.get("header", ""): bucket.get("items", [])
-                for bucket in sorted_buckets
-            },
-            st.session_state.attending_names,
+    with mcol1:
+        alliance_1_members = st.multiselect(
+            "Alliance 1 Members",
+            options=attendee_options,
+            default=existing_alliance_1_members,
+            key=f"a1_attendees_{st.session_state.attendee_drag_version}",
         )
 
-        if new_attendee_buckets != st.session_state.attendee_buckets:
-            st.session_state.attendee_buckets = new_attendee_buckets
-            st.session_state.attendee_drag_version += 1
-            st.session_state.trade_plan = None
-            st.session_state.shared_should_show_plan = False
-            st.rerun()
+    with mcol2:
+        alliance_2_members = st.multiselect(
+            "Alliance 2 Members",
+            options=[
+                name
+                for name in attendee_options
+                if name not in alliance_1_members
+            ],
+            default=[
+                name
+                for name in existing_alliance_2_members
+                if name not in alliance_1_members
+            ],
+            key=f"a2_attendees_{st.session_state.attendee_drag_version}",
+        )
 
     alliance_1_members = sort_names(
-        st.session_state.attendee_buckets.get("Alliance 1", [])
+        st.session_state[f"a1_attendees_{st.session_state.attendee_drag_version}"]
     )
-    alliance_2_members = sort_names(
-        st.session_state.attendee_buckets.get("Alliance 2", [])
-    )
-
-elif st.session_state.attending_names:
-    st.warning(
-        "Drag-and-drop requires streamlit-sortables. "
-        "Using multi-select assignment instead."
-    )
-
-    alliance_1_members = st.multiselect(
-        "Alliance 1 Members",
-        options=sort_names(st.session_state.attending_names),
-        key="a1_attendees_fallback",
-    )
-    alliance_2_members = st.multiselect(
-        "Alliance 2 Members",
-        options=[
-            name
-            for name in sort_names(st.session_state.attending_names)
-            if name not in alliance_1_members
-        ],
-        key="a2_attendees_fallback",
-    )
-    alliance_1_members = sort_names(alliance_1_members)
     alliance_2_members = sort_names(alliance_2_members)
+    available_attendees = [
+        name
+        for name in attendee_options
+        if name not in alliance_1_members and name not in alliance_2_members
+    ]
+
+    if available_attendees:
+        st.markdown(
+            "**Available attendees:** "
+            + ", ".join(available_attendees)
+        )
+
+    new_attendee_buckets = normalize_attendee_buckets(
+        {
+            "Alliance 1": alliance_1_members,
+            "Alliance 2": alliance_2_members,
+        },
+        st.session_state.attending_names,
+    )
+
+    if new_attendee_buckets != st.session_state.attendee_buckets:
+        st.session_state.attendee_buckets = new_attendee_buckets
+        st.session_state.trade_plan = None
+        st.session_state.shared_should_show_plan = False
 
 else:
     alliance_1_members = []
